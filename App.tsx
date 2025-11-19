@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Book, CartItem, User, Order, ViewState, SalesData } from './types';
+import { Book, CartItem, User, Order, ViewState, SalesData, TimeSlot, Booking } from './types';
 import { generateAuthorResponse } from './services/geminiService';
 import { BookStore } from './components/BookStore';
 import { AdminDashboard } from './components/AdminDashboard';
@@ -19,7 +19,12 @@ import {
   CreditCard,
   Lock,
   Radio,
-  Headphones
+  Headphones,
+  Calendar,
+  Clock,
+  Users,
+  DollarSign,
+  MessageSquare
 } from 'lucide-react';
 
 // --- MOCK DATA ---
@@ -104,6 +109,13 @@ const App: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   
+  // Meet & Greet State
+  const [selectedDate, setSelectedDate] = useState<string>('');
+  const [selectedTime, setSelectedTime] = useState<string>('');
+  const [selectedType, setSelectedType] = useState<'meet-greet' | 'book-signing' | 'discussion'>('meet-greet');
+  const [bookingStep, setBookingStep] = useState<1 | 2 | 3 | 4>(1);
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  
   // Admin Mock Data State
   const [users, setUsers] = useState<User[]>(MOCK_USERS);
   const [orders, setOrders] = useState<Order[]>(MOCK_ORDERS);
@@ -169,6 +181,7 @@ const App: React.FC = () => {
             <button onClick={() => setView('home')} className={`text-sm font-medium transition-colors ${view === 'home' ? 'text-military-600' : 'text-stone-500 hover:text-stone-900'}`}>Home</button>
             <button onClick={() => setView('store')} className={`text-sm font-medium transition-colors ${view === 'store' ? 'text-military-600' : 'text-stone-500 hover:text-stone-900'}`}>Books</button>
             <button onClick={() => setView('podcast')} className={`text-sm font-medium transition-colors ${view === 'podcast' ? 'text-military-600' : 'text-stone-500 hover:text-stone-900'}`}>Podcast</button>
+            <button onClick={() => setView('meet-greet')} className={`text-sm font-medium transition-colors ${view === 'meet-greet' ? 'text-military-600' : 'text-stone-500 hover:text-stone-900'}`}>Meet & Greet</button>
             {currentUser?.role === 'admin' && (
               <button onClick={() => setView('admin')} className={`text-sm font-medium transition-colors ${view === 'admin' ? 'text-military-600' : 'text-stone-500 hover:text-stone-900'}`}>Dashboard</button>
             )}
@@ -203,6 +216,7 @@ const App: React.FC = () => {
             <button onClick={() => {setView('home'); setIsMenuOpen(false)}} className="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-stone-700 hover:text-stone-900 hover:bg-stone-50">Home</button>
             <button onClick={() => {setView('store'); setIsMenuOpen(false)}} className="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-stone-700 hover:text-stone-900 hover:bg-stone-50">Books</button>
             <button onClick={() => {setView('podcast'); setIsMenuOpen(false)}} className="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-stone-700 hover:text-stone-900 hover:bg-stone-50">Podcast</button>
+            <button onClick={() => {setView('meet-greet'); setIsMenuOpen(false)}} className="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-stone-700 hover:text-stone-900 hover:bg-stone-50">Meet & Greet</button>
             <button onClick={() => {toggleAdmin(); setIsMenuOpen(false)}} className="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-stone-700 hover:text-stone-900 hover:bg-stone-50">
               {currentUser ? 'Logout' : 'Admin Login'}
             </button>
@@ -439,6 +453,482 @@ const App: React.FC = () => {
     </div>
   );
 
+  // Helper functions for Meet & Greet
+  const generateAvailability = (): TimeSlot[] => {
+    const slots: TimeSlot[] = [];
+    const today = new Date();
+    
+    // Generate availability for next 30 days
+    for (let i = 1; i <= 30; i++) {
+      const date = new Date(today);
+      date.setDate(today.getDate() + i);
+      
+      // Skip weekends for bookings
+      if (date.getDay() !== 0 && date.getDay() !== 6) {
+        const dateStr = date.toISOString().split('T')[0];
+        
+        // Add time slots from 10 AM to 4 PM
+        const times = ['10:00 AM', '11:30 AM', '1:00 PM', '2:30 PM', '4:00 PM'];
+        times.forEach((time, index) => {
+          slots.push({
+            id: `${dateStr}-${index}`,
+            date: dateStr,
+            time,
+            available: Math.random() > 0.3, // 70% availability
+            booked: Math.random() > 0.8 // 20% booked
+          });
+        });
+      }
+    }
+    
+    return slots;
+  };
+
+  const [availability] = useState<TimeSlot[]>(generateAvailability());
+
+  const bookingTypes = [
+    {
+      type: 'meet-greet' as const,
+      title: 'Meet & Greet',
+      description: 'Personal introduction and brief conversation with Robert R. Williams',
+      duration: '30 minutes',
+      price: 25,
+      icon: Users
+    },
+    {
+      type: 'book-signing' as const,
+      title: 'Book Signing',
+      description: 'Personal book signing session with photo opportunity',
+      duration: '45 minutes',
+      price: 35,
+      icon: MessageSquare
+    },
+    {
+      type: 'discussion' as const,
+      title: 'Author Discussion',
+      description: 'In-depth conversation about literature, politics, and military experience',
+      duration: '60 minutes',
+      price: 50,
+      icon: MessageSquare
+    }
+  ];
+
+  const getSelectedTypeInfo = () => {
+    return bookingTypes.find(type => type.type === selectedType)!;
+  };
+
+  const getAvailableDates = () => {
+    const dates = new Set(availability.filter(slot => slot.available && !slot.booked).map(slot => slot.date));
+    return Array.from(dates).sort();
+  };
+
+  const getAvailableTimes = (date: string) => {
+    return availability.filter(slot => slot.date === date && slot.available && !slot.booked).map(slot => slot.time);
+  };
+
+  const handleBookingSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    const selectedTypeInfo = getSelectedTypeInfo();
+    const newBooking: Booking = {
+      id: `booking_${Date.now()}`,
+      customerName: (e.target as any).customerName.value,
+      customerEmail: (e.target as any).customerEmail.value,
+      customerPhone: (e.target as any).customerPhone.value,
+      date: selectedDate,
+      time: selectedTime,
+      duration: parseInt(selectedTypeInfo.duration.split(' ')[0]),
+      type: selectedType,
+      notes: (e.target as any).notes.value,
+      paymentStatus: 'paid',
+      amount: selectedTypeInfo.price,
+      createdAt: new Date().toISOString()
+    };
+    
+    setBookings(prev => [...prev, newBooking]);
+    setBookingStep(4);
+  };
+
+  const MeetGreetView = () => (
+    <div className="py-20 bg-stone-50 min-h-screen">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        
+        {/* Header */}
+        <div className="text-center mb-16">
+          <div className="flex items-center justify-center mb-6">
+            <Calendar className="text-military-600 mr-3" size={40} />
+            <h1 className="text-4xl md:text-5xl font-serif font-bold text-stone-900">Meet & Greet</h1>
+          </div>
+          <p className="text-xl text-stone-600 max-w-3xl mx-auto leading-relaxed">
+            Book a personal meeting with Robert R. Williams
+          </p>
+        </div>
+
+        {/* Author Info Section */}
+        <div className="bg-white rounded-3xl shadow-2xl overflow-hidden mb-12">
+          <div className="lg:grid lg:grid-cols-3">
+            <div className="lg:col-span-2 p-8 lg:p-12">
+              <h2 className="text-3xl font-serif font-bold text-stone-900 mb-6">About Robert R. Williams</h2>
+              <div className="prose prose-lg text-stone-600 space-y-4">
+                <p>
+                  <strong>Retired U.S. Army Colonel</strong> with 32 years of distinguished service, including 18 years as a Russia Foreign Area Officer with extensive experience in Eastern Europe and missions in Russia proper.
+                </p>
+                <p>
+                  Born in Memphis, Tennessee (1960), Robert grew up in West Memphis, Arkansas. His military career spanned from the Infantry to Foreign Area Officer specialization, giving him unique insights into international relations and global affairs.
+                </p>
+                <p>
+                  An accomplished author known for works like <em>"Rainbow Farm"</em> and <em>"Woodlawn Giants"</em>, Robert brings together his military experience, literary talent, and diplomatic insights in his engaging presentations.
+                </p>
+                <div className="bg-stone-50 p-6 rounded-xl border-l-4 border-military-500">
+                  <h3 className="font-bold text-stone-900 mb-2">What to Expect:</h3>
+                  <ul className="space-y-2 text-stone-600">
+                    <li>• Personal stories from a 32-year military career</li>
+                    <li>• Insights into international diplomacy and foreign relations</li>
+                    <li>• Discussion about his literary works and inspiration</li>
+                    <li>• Q&A about military service, literature, and current affairs</li>
+                    <li>• Personalized photo opportunity</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+            
+            <div className="bg-gradient-to-br from-military-600 to-military-800 p-8 lg:p-12 text-white flex items-center justify-center">
+              <div className="text-center">
+                <img
+                  src="https://picsum.photos/id/338/400/500"
+                  alt="Robert R. Williams"
+                  className="w-48 h-56 object-cover rounded-2xl mx-auto mb-6 shadow-2xl"
+                />
+                <h3 className="text-2xl font-bold mb-2">Col. Robert R. Williams</h3>
+                <p className="text-military-100 mb-4">Retired Army Officer & Author</p>
+                <div className="space-y-2 text-sm">
+                  <div>📍 Northern Virginia</div>
+                  <div>📚 3 Published Books</div>
+                  <div>🎖️ 32 Years Service</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Booking Process */}
+        <div className="bg-white rounded-3xl shadow-2xl overflow-hidden">
+          <div className="p-8 lg:p-12">
+            {/* Progress Steps */}
+            <div className="flex items-center justify-center mb-12">
+              {[1, 2, 3, 4].map((step) => (
+                <div key={step} className="flex items-center">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm ${
+                    bookingStep >= step ? 'bg-military-600 text-white' : 'bg-stone-200 text-stone-500'
+                  }`}>
+                    {step}
+                  </div>
+                  {step < 4 && (
+                    <div className={`w-16 h-1 mx-2 ${
+                      bookingStep > step ? 'bg-military-600' : 'bg-stone-200'
+                    }`} />
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Step 1: Meeting Type Selection */}
+            {bookingStep === 1 && (
+              <div>
+                <h2 className="text-2xl font-serif font-bold text-stone-900 mb-8 text-center">Choose Your Meeting Type</h2>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {bookingTypes.map((type) => {
+                    const IconComponent = type.icon;
+                    return (
+                      <div
+                        key={type.type}
+                        onClick={() => setSelectedType(type.type)}
+                        className={`p-6 rounded-2xl border-2 cursor-pointer transition-all ${
+                          selectedType === type.type
+                            ? 'border-military-500 bg-military-50'
+                            : 'border-stone-200 hover:border-stone-300'
+                        }`}
+                      >
+                        <div className="text-center">
+                          <IconComponent className="mx-auto mb-4 text-military-600" size={48} />
+                          <h3 className="text-xl font-bold text-stone-900 mb-2">{type.title}</h3>
+                          <p className="text-stone-600 text-sm mb-4">{type.description}</p>
+                          <div className="flex justify-between items-center">
+                            <span className="text-stone-500 text-sm">{type.duration}</span>
+                            <span className="text-2xl font-bold text-military-600">${type.price}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="text-center mt-8">
+                  <button
+                    onClick={() => setBookingStep(2)}
+                    className="px-8 py-3 bg-military-600 hover:bg-military-500 text-white font-bold rounded-lg transition-colors"
+                  >
+                    Continue to Date & Time
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 2: Date & Time Selection */}
+            {bookingStep === 2 && (
+              <div>
+                <h2 className="text-2xl font-serif font-bold text-stone-900 mb-8 text-center">Select Date & Time</h2>
+                
+                {/* Calendar */}
+                <div className="mb-8">
+                  <h3 className="text-lg font-bold text-stone-900 mb-4">Available Dates</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                    {getAvailableDates().slice(0, 12).map((date: string) => {
+                      const dateObj = new Date(date);
+                      const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
+                      const dayNum = dateObj.getDate();
+                      const month = dateObj.toLocaleDateString('en-US', { month: 'short' });
+                      
+                      return (
+                        <button
+                          key={date}
+                          onClick={() => {
+                            setSelectedDate(date);
+                            setSelectedTime(''); // Reset time when date changes
+                          }}
+                          className={`p-4 rounded-xl border text-center transition-all ${
+                            selectedDate === date
+                              ? 'border-military-500 bg-military-50 text-military-700'
+                              : 'border-stone-200 hover:border-stone-300'
+                          }`}
+                        >
+                          <div className="text-sm font-medium">{dayName}</div>
+                          <div className="text-lg font-bold">{dayNum}</div>
+                          <div className="text-xs text-stone-500">{month}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Time Slots */}
+                {selectedDate && (
+                  <div className="mb-8">
+                    <h3 className="text-lg font-bold text-stone-900 mb-4">Available Times</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                      {getAvailableTimes(selectedDate).map((time: string) => (
+                        <button
+                          key={time}
+                          onClick={() => setSelectedTime(time)}
+                          className={`p-3 rounded-lg border text-center transition-all ${
+                            selectedTime === time
+                              ? 'border-military-500 bg-military-50 text-military-700'
+                              : 'border-stone-200 hover:border-stone-300'
+                          }`}
+                        >
+                          <Clock className="mx-auto mb-1" size={16} />
+                          <div className="text-sm font-medium">{time}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-between">
+                  <button
+                    onClick={() => setBookingStep(1)}
+                    className="px-6 py-3 border border-stone-300 text-stone-700 rounded-lg hover:bg-stone-50 transition-colors"
+                  >
+                    Back
+                  </button>
+                  <button
+                    onClick={() => setBookingStep(3)}
+                    disabled={!selectedDate || !selectedTime}
+                    className="px-8 py-3 bg-military-600 hover:bg-military-500 disabled:bg-stone-300 disabled:cursor-not-allowed text-white font-bold rounded-lg transition-colors"
+                  >
+                    Continue to Details
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 3: Customer Details */}
+            {bookingStep === 3 && (
+              <div>
+                <h2 className="text-2xl font-serif font-bold text-stone-900 mb-8 text-center">Booking Details</h2>
+                
+                <form onSubmit={handleBookingSubmit} className="max-w-2xl mx-auto">
+                  <div className="bg-stone-50 p-6 rounded-xl mb-6">
+                    <h3 className="font-bold text-stone-900 mb-4">Booking Summary</h3>
+                    <div className="space-y-2 text-stone-600">
+                      <div className="flex justify-between">
+                        <span>Type:</span>
+                        <span className="font-medium">{getSelectedTypeInfo().title}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Duration:</span>
+                        <span className="font-medium">{getSelectedTypeInfo().duration}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Date:</span>
+                        <span className="font-medium">{new Date(selectedDate).toLocaleDateString()}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Time:</span>
+                        <span className="font-medium">{selectedTime}</span>
+                      </div>
+                      <div className="flex justify-between border-t border-stone-300 pt-2">
+                        <span className="font-bold">Total:</span>
+                        <span className="font-bold text-military-600">${getSelectedTypeInfo().price}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div>
+                      <label className="block text-sm font-medium text-stone-700 mb-2">Full Name *</label>
+                      <input
+                        type="text"
+                        name="customerName"
+                        required
+                        className="w-full px-4 py-3 border border-stone-300 rounded-lg focus:ring-2 focus:ring-military-500 outline-none"
+                        placeholder="Your full name"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-stone-700 mb-2">Email Address *</label>
+                      <input
+                        type="email"
+                        name="customerEmail"
+                        required
+                        className="w-full px-4 py-3 border border-stone-300 rounded-lg focus:ring-2 focus:ring-military-500 outline-none"
+                        placeholder="your@email.com"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mb-6">
+                    <label className="block text-sm font-medium text-stone-700 mb-2">Phone Number</label>
+                    <input
+                      type="tel"
+                      name="customerPhone"
+                      className="w-full px-4 py-3 border border-stone-300 rounded-lg focus:ring-2 focus:ring-military-500 outline-none"
+                      placeholder="(555) 123-4567"
+                    />
+                  </div>
+
+                  <div className="mb-6">
+                    <label className="block text-sm font-medium text-stone-700 mb-2">Special Requests or Questions</label>
+                    <textarea
+                      name="notes"
+                      rows={4}
+                      className="w-full px-4 py-3 border border-stone-300 rounded-lg focus:ring-2 focus:ring-military-500 outline-none"
+                      placeholder="Any specific topics you'd like to discuss or special requests..."
+                    ></textarea>
+                  </div>
+
+                  {/* Payment Section */}
+                  <div className="bg-white border-2 border-stone-200 rounded-xl p-6 mb-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="font-bold text-stone-900">Advance Payment Required</h4>
+                      <DollarSign className="text-military-600" size={24} />
+                    </div>
+                    <p className="text-stone-600 text-sm mb-4">
+                      A advance payment of ${getSelectedTypeInfo().price} is required to secure your booking. This will be applied to your total.
+                    </p>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-stone-700 mb-2">Card Number *</label>
+                        <input
+                          type="text"
+                          required
+                          className="w-full px-4 py-3 border border-stone-300 rounded-lg focus:ring-2 focus:ring-military-500 outline-none"
+                          placeholder="0000 0000 0000 0000"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-stone-700 mb-2">Expiry Date *</label>
+                          <input
+                            type="text"
+                            required
+                            className="w-full px-4 py-3 border border-stone-300 rounded-lg focus:ring-2 focus:ring-military-500 outline-none"
+                            placeholder="MM/YY"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-stone-700 mb-2">CVC *</label>
+                          <input
+                            type="text"
+                            required
+                            className="w-full px-4 py-3 border border-stone-300 rounded-lg focus:ring-2 focus:ring-military-500 outline-none"
+                            placeholder="123"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-between">
+                    <button
+                      type="button"
+                      onClick={() => setBookingStep(2)}
+                      className="px-6 py-3 border border-stone-300 text-stone-700 rounded-lg hover:bg-stone-50 transition-colors"
+                    >
+                      Back
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-8 py-3 bg-military-600 hover:bg-military-500 text-white font-bold rounded-lg transition-colors flex items-center"
+                    >
+                      <CreditCard className="mr-2" size={20} />
+                      Confirm Booking - ${getSelectedTypeInfo().price}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {/* Step 4: Confirmation */}
+            {bookingStep === 4 && (
+              <div className="text-center">
+                <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <span className="text-4xl">✓</span>
+                </div>
+                <h2 className="text-3xl font-serif font-bold text-stone-900 mb-4">Booking Confirmed!</h2>
+                <p className="text-stone-600 mb-8">
+                  Thank you for booking a meeting with Robert R. Williams. You will receive a confirmation email shortly.
+                </p>
+                
+                <div className="bg-stone-50 rounded-xl p-6 max-w-md mx-auto mb-8">
+                  <h3 className="font-bold text-stone-900 mb-4">Meeting Details</h3>
+                  <div className="space-y-2 text-stone-600">
+                    <div><strong>Type:</strong> {getSelectedTypeInfo().title}</div>
+                    <div><strong>Date:</strong> {new Date(selectedDate).toLocaleDateString()}</div>
+                    <div><strong>Time:</strong> {selectedTime}</div>
+                    <div><strong>Duration:</strong> {getSelectedTypeInfo().duration}</div>
+                    <div><strong>Location:</strong> Northern Virginia (details via email)</div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setBookingStep(1);
+                    setSelectedDate('');
+                    setSelectedTime('');
+                    setSelectedType('meet-greet');
+                  }}
+                  className="px-6 py-3 bg-stone-900 text-white rounded-lg hover:bg-stone-800 transition-colors"
+                >
+                  Book Another Meeting
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   const CheckoutView = () => (
     <div className="py-12 bg-stone-50 min-h-screen">
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -524,6 +1014,7 @@ const App: React.FC = () => {
         {view === 'home' && <HomeView />}
         {view === 'store' && <BookStore books={MOCK_BOOKS} onAddToCart={addToCart} />}
         {view === 'podcast' && <PodcastView />}
+        {view === 'meet-greet' && <MeetGreetView />}
         {view === 'admin' && <AdminDashboard users={users} orders={orders} salesData={sales} />}
         {view === 'checkout' && <CheckoutView />}
         {view === 'success' && <SuccessView />}

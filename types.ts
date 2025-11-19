@@ -36,4 +36,27 @@ export interface SalesData {
   sales: number;
 }
 
-export type ViewState = 'home' | 'store' | 'admin' | 'checkout' | 'success' | 'podcast';
+export type ViewState = 'home' | 'store' | 'admin' | 'checkout' | 'success' | 'podcast' | 'meet-greet';
+
+export interface TimeSlot {
+  id: string;
+  date: string;
+  time: string;
+  available: boolean;
+  booked?: boolean;
+}
+
+export interface Booking {
+  id: string;
+  customerName: string;
+  customerEmail: string;
+  customerPhone?: string;
+  date: string;
+  time: string;
+  duration: number; // in minutes
+  type: 'meet-greet' | 'book-signing' | 'discussion';
+  notes?: string;
+  paymentStatus: 'pending' | 'paid' | 'confirmed';
+  amount: number;
+  createdAt: string;
+}
