@@ -36,7 +36,19 @@ export interface SalesData {
   sales: number;
 }
 
-export type ViewState = 'home' | 'store' | 'admin' | 'checkout' | 'success' | 'podcast' | 'meet-greet';
+export type ViewState = 'home' | 'store' | 'admin' | 'checkout' | 'success' | 'podcast' | 'meet-greet' | 'episode';
+
+export interface Episode {
+  id: string;
+  number: number;
+  title: string;
+  description: string;
+  duration: string;
+  date: string;
+  hasPlayer: boolean;
+  playerSrc?: string;
+  externalUrl?: string;
+}
 
 export interface TimeSlot {
   id: string;

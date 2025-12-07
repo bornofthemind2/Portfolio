@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Book, CartItem, User, Order, ViewState, SalesData, TimeSlot, Booking } from './types';
+import { Book, CartItem, User, Order, ViewState, SalesData, TimeSlot, Booking, Episode } from './types';
 import { generateAuthorResponse } from './services/geminiService';
 import { BookStore } from './components/BookStore';
 import { AdminDashboard } from './components/AdminDashboard';
@@ -101,6 +101,29 @@ const MOCK_ORDERS: Order[] = [
   { id: 'o2', customerName: 'John Smith', total: 44.49, date: '2023-06-10', status: 'shipped' },
 ];
 
+const MOCK_EPISODES: Episode[] = [
+  {
+    id: '1',
+    number: 1,
+    title: 'Hey US, THE World is not a zero-sum game',
+    description: 'Episode one of this podcast will present to you the moderators via a brief introduction and talk about their experiences overseas, albeit different. With Chloe having been born in India, and Bob having served in the US Army with several posts throughout Europe to include also Korea. Our intent is to show that the world is not a zero sum game. In other words, because the US does things one way doesn\'t mean you can\'t get positive results in other countries doing it, albeit a different way.',
+    duration: '45 minutes',
+    date: 'November 2024',
+    hasPlayer: true,
+    playerSrc: 'https://www.podbean.com/player-v2/?i=4dkfs-16dc4df-pb&from=pb6admin&share=1&download=1&rtl=0&fonts=Arial&skin=1&font-color=auto&logo_link=episode_page&btn-skin=7'
+  },
+  {
+    id: '2',
+    number: 2,
+    title: 'Death Penalty',
+    description: 'A critical examination of capital punishment from multiple perspectives, exploring the moral, legal, and practical implications of the death penalty system.',
+    duration: '52 minutes',
+    date: 'December 2024',
+    hasPlayer: true,
+    playerSrc: 'https://www.podbean.com/player-v2/?i=nekdx-19e2df4-pb&from=pb6admin&share=1&download=1&rtl=0&fonts=Arial&skin=1&font-color=auto&logo_link=episode_page&btn-skin=7'
+  }
+];
+
 // --- MAIN APP COMPONENT ---
 
 const App: React.FC = () => {
@@ -115,6 +138,9 @@ const App: React.FC = () => {
   const [selectedType, setSelectedType] = useState<'meet-greet' | 'book-signing' | 'discussion'>('meet-greet');
   const [bookingStep, setBookingStep] = useState<1 | 2 | 3 | 4>(1);
   const [bookings, setBookings] = useState<Booking[]>([]);
+  
+  // Podcast Episode State
+  const [selectedEpisode, setSelectedEpisode] = useState<Episode | null>(null);
   
   // Admin Mock Data State
   const [users, setUsers] = useState<User[]>(MOCK_USERS);
@@ -180,7 +206,7 @@ const App: React.FC = () => {
           <div className="hidden md:flex items-center space-x-8">
             <button onClick={() => setView('home')} className={`text-sm font-medium transition-colors ${view === 'home' ? 'text-military-600' : 'text-stone-500 hover:text-stone-900'}`}>Home</button>
             <button onClick={() => setView('store')} className={`text-sm font-medium transition-colors ${view === 'store' ? 'text-military-600' : 'text-stone-500 hover:text-stone-900'}`}>Books</button>
-            <button onClick={() => setView('podcast')} className={`text-sm font-medium transition-colors ${view === 'podcast' ? 'text-military-600' : 'text-stone-500 hover:text-stone-900'}`}>Podcast</button>
+            <button onClick={() => {setView('podcast'); setSelectedEpisode(null)}} className={`text-sm font-medium transition-colors ${view === 'podcast' || view === 'episode' ? 'text-military-600' : 'text-stone-500 hover:text-stone-900'}`}>Podcast</button>
             <button onClick={() => setView('meet-greet')} className={`text-sm font-medium transition-colors ${view === 'meet-greet' ? 'text-military-600' : 'text-stone-500 hover:text-stone-900'}`}>Meet & Greet</button>
             {currentUser?.role === 'admin' && (
               <button onClick={() => setView('admin')} className={`text-sm font-medium transition-colors ${view === 'admin' ? 'text-military-600' : 'text-stone-500 hover:text-stone-900'}`}>Dashboard</button>
@@ -215,7 +241,7 @@ const App: React.FC = () => {
           <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
             <button onClick={() => {setView('home'); setIsMenuOpen(false)}} className="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-stone-700 hover:text-stone-900 hover:bg-stone-50">Home</button>
             <button onClick={() => {setView('store'); setIsMenuOpen(false)}} className="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-stone-700 hover:text-stone-900 hover:bg-stone-50">Books</button>
-            <button onClick={() => {setView('podcast'); setIsMenuOpen(false)}} className="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-stone-700 hover:text-stone-900 hover:bg-stone-50">Podcast</button>
+            <button onClick={() => {setView('podcast'); setSelectedEpisode(null); setIsMenuOpen(false)}} className="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-stone-700 hover:text-stone-900 hover:bg-stone-50">Podcast</button>
             <button onClick={() => {setView('meet-greet'); setIsMenuOpen(false)}} className="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-stone-700 hover:text-stone-900 hover:bg-stone-50">Meet & Greet</button>
             <button onClick={() => {toggleAdmin(); setIsMenuOpen(false)}} className="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-stone-700 hover:text-stone-900 hover:bg-stone-50">
               {currentUser ? 'Logout' : 'Admin Login'}
@@ -340,57 +366,29 @@ const App: React.FC = () => {
           <div className="lg:grid lg:grid-cols-2">
             <div className="p-8 lg:p-12">
               <div className="flex items-center mb-4">
-                <span className="bg-military-100 text-military-700 px-3 py-1 rounded-full text-sm font-bold mr-3">EPISODE 1</span>
-                <span className="text-stone-500 text-sm">45 minutes</span>
+                <span className="bg-military-100 text-military-700 px-3 py-1 rounded-full text-sm font-bold mr-3">LATEST EPISODE</span>
+                <span className="text-stone-500 text-sm">{MOCK_EPISODES[0].duration}</span>
               </div>
               
               <h2 className="text-3xl lg:text-4xl font-serif font-bold text-stone-900 mb-4">
-                Hey US, THE World is not a zero-sum game
+                {MOCK_EPISODES[0].title}
               </h2>
               
               <div className="prose prose-lg text-stone-600 mb-8">
-                <p>
-                  Episode one of this podcast will present to you the moderators via a brief introduction and talk about their experiences overseas, albeit different. With Chloe having been born in India, and Bob having served in the US Army with several posts throughout Europe to include also Korea.
-                </p>
-                <p>
-                  Our intent is to show that the world is not a zero sum game. In other words, because the US does things one way doesn't mean you can't get positive results in other countries doing it, albeit a different way.
-                </p>
-              </div>
-
-              <div className="space-y-4 mb-8">
-                <h3 className="text-lg font-bold text-stone-900">Meet the Moderators</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="flex items-start space-x-3">
-                    <div className="w-12 h-12 bg-military-100 rounded-full flex items-center justify-center flex-shrink-0">
-                      <span className="text-military-600 font-bold">C</span>
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-stone-900">Chloe</h4>
-                      <p className="text-stone-600 text-sm">Born in India - International perspective</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start space-x-3">
-                    <div className="w-12 h-12 bg-military-100 rounded-full flex items-center justify-center flex-shrink-0">
-                      <span className="text-military-600 font-bold">B</span>
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-stone-900">Bob</h4>
-                      <p className="text-stone-600 text-sm">US Army veteran - Europe & Korea experience</p>
-                    </div>
-                  </div>
-                </div>
+                <p>{MOCK_EPISODES[0].description}</p>
               </div>
 
               <div className="flex flex-col sm:flex-row gap-4">
-                <a
-                  href="https://podbean.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <button
+                  onClick={() => {
+                    setSelectedEpisode(MOCK_EPISODES[0]);
+                    setView('episode');
+                  }}
                   className="inline-flex items-center justify-center px-6 py-3 bg-military-600 hover:bg-military-500 text-white font-bold rounded-lg transition-colors shadow-lg"
                 >
                   <Headphones className="mr-2" size={20} />
-                  Listen on Podbean
-                </a>
+                  Listen Now
+                </button>
                 <button className="inline-flex items-center justify-center px-6 py-3 bg-stone-100 hover:bg-stone-200 text-stone-700 font-medium rounded-lg transition-colors">
                   Subscribe for Updates
                 </button>
@@ -402,11 +400,11 @@ const App: React.FC = () => {
                 <Radio className="mx-auto mb-6" size={80} />
                 <h3 className="text-2xl font-bold mb-4">Global Perspectives</h3>
                 <p className="text-military-100 text-lg">
-                  "The world is not a zero sum game"
+                  "Exploring international viewpoints"
                 </p>
                 <div className="mt-8 flex items-center justify-center space-x-4">
                   <div className="text-center">
-                    <div className="text-2xl font-bold">1</div>
+                    <div className="text-2xl font-bold">{MOCK_EPISODES.length}</div>
                     <div className="text-military-200 text-sm">Episodes</div>
                   </div>
                   <div className="text-center">
@@ -427,23 +425,32 @@ const App: React.FC = () => {
         <div className="bg-white rounded-2xl shadow-xl p-8">
           <h3 className="text-2xl font-serif font-bold text-stone-900 mb-6">Episodes Archive</h3>
           <div className="space-y-4">
-            <div className="border-l-4 border-military-500 pl-6 py-4 bg-stone-50 rounded-r-lg">
-              <div className="flex items-center justify-between mb-2">
-                <h4 className="font-bold text-stone-900">Episode 1: Hey US, THE World is not a zero-sum game</h4>
-                <span className="text-stone-500 text-sm">45 min</span>
+            {MOCK_EPISODES.map((episode) => (
+              <div 
+                key={episode.id}
+                className="border-l-4 border-military-500 pl-6 py-4 bg-stone-50 rounded-r-lg cursor-pointer hover:bg-stone-100 transition-colors"
+                onClick={() => {
+                  setSelectedEpisode(episode);
+                  setView('episode');
+                }}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="font-bold text-stone-900">Episode {episode.number}: {episode.title}</h4>
+                  <span className="text-stone-500 text-sm">{episode.duration}</span>
+                </div>
+                <p className="text-stone-600 text-sm mb-3">
+                  {episode.description.length > 150 ? `${episode.description.substring(0, 150)}...` : episode.description}
+                </p>
+                <div className="flex items-center space-x-4">
+                  <button className="text-military-600 hover:text-military-700 font-medium text-sm flex items-center">
+                    <Headphones size={16} className="mr-1" />
+                    Listen Now
+                  </button>
+                  <span className="text-stone-400 text-sm">•</span>
+                  <span className="text-stone-500 text-sm">{episode.date}</span>
+                </div>
               </div>
-              <p className="text-stone-600 text-sm mb-3">
-                Introduction to Chloe and Bob, discussing their diverse international experiences and the podcast's core message about global cooperation.
-              </p>
-              <div className="flex items-center space-x-4">
-                <button className="text-military-600 hover:text-military-700 font-medium text-sm flex items-center">
-                  <Headphones size={16} className="mr-1" />
-                  Listen Now
-                </button>
-                <span className="text-stone-400 text-sm">•</span>
-                <span className="text-stone-500 text-sm">November 2024</span>
-              </div>
-            </div>
+            ))}
           </div>
           <div className="mt-6 text-center">
             <p className="text-stone-500 text-sm">More episodes coming soon...</p>
@@ -452,6 +459,88 @@ const App: React.FC = () => {
       </div>
     </div>
   );
+
+  const EpisodeView = () => {
+    if (!selectedEpisode) {
+      return <div>Episode not found</div>;
+    }
+
+    return (
+      <div className="py-20 bg-stone-50 min-h-screen">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          
+          {/* Back Button */}
+          <button 
+            onClick={() => setView('podcast')}
+            className="mb-8 inline-flex items-center text-military-600 hover:text-military-700 font-medium"
+          >
+            ← Back to Podcast
+          </button>
+
+          {/* Episode Header */}
+          <div className="bg-white rounded-3xl shadow-2xl overflow-hidden mb-8">
+            <div className="p-8 lg:p-12">
+              <div className="flex items-center mb-4">
+                <span className="bg-military-100 text-military-700 px-3 py-1 rounded-full text-sm font-bold mr-3">
+                  EPISODE {selectedEpisode.number}
+                </span>
+                <span className="text-stone-500 text-sm">{selectedEpisode.duration}</span>
+              </div>
+              
+              <h1 className="text-3xl lg:text-4xl font-serif font-bold text-stone-900 mb-4">
+                {selectedEpisode.title}
+              </h1>
+              
+              <p className="text-stone-500 text-sm mb-6">{selectedEpisode.date}</p>
+              
+              <div className="prose prose-lg text-stone-600">
+                <p>{selectedEpisode.description}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Embedded Player */}
+          {selectedEpisode.hasPlayer && selectedEpisode.playerSrc && (
+            <div className="bg-white rounded-2xl shadow-xl p-8 mb-8">
+              <h2 className="text-2xl font-serif font-bold text-stone-900 mb-6">Listen Now</h2>
+              <div className="flex justify-center">
+                <iframe 
+                  title={selectedEpisode.title}
+                  allowtransparency="true" 
+                  height="150" 
+                  width="100%" 
+                  style={{border: 'none', minWidth: 'min(100%, 430px)', height: '150px'}} 
+                  scrolling="no" 
+                  data-name="pb-iframe-player" 
+                  src={selectedEpisode.playerSrc}
+                  loading="lazy">
+                </iframe>
+              </div>
+            </div>
+          )}
+
+          {/* Episode Actions */}
+          <div className="bg-white rounded-2xl shadow-xl p-8">
+            <h3 className="text-xl font-bold text-stone-900 mb-4">Share & Subscribe</h3>
+            <div className="flex flex-col sm:flex-row gap-4">
+              <a
+                href="https://podbean.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center px-6 py-3 bg-military-600 hover:bg-military-500 text-white font-bold rounded-lg transition-colors shadow-lg"
+              >
+                <Headphones className="mr-2" size={20} />
+                Listen on Podbean
+              </a>
+              <button className="inline-flex items-center justify-center px-6 py-3 bg-stone-100 hover:bg-stone-200 text-stone-700 font-medium rounded-lg transition-colors">
+                Subscribe for Updates
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   // Helper functions for Meet & Greet
   const generateAvailability = (): TimeSlot[] => {
@@ -1013,7 +1102,7 @@ const App: React.FC = () => {
       <main className="flex-grow">
         {view === 'home' && <HomeView />}
         {view === 'store' && <BookStore books={MOCK_BOOKS} onAddToCart={addToCart} />}
-        {view === 'podcast' && <PodcastView />}
+        {(view === 'podcast' || view === 'episode') && (selectedEpisode ? <EpisodeView /> : <PodcastView />)}
         {view === 'meet-greet' && <MeetGreetView />}
         {view === 'admin' && <AdminDashboard users={users} orders={orders} salesData={sales} />}
         {view === 'checkout' && <CheckoutView />}
